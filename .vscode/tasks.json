@@ -1,0 +1,36 @@
+{
+	"version": "2.0.0",
+	"type": "shell",
+	"presentation": {
+		"echo": true,
+		"reveal": "always",
+		"focus": false,
+		"panel": "shared"
+	},
+	"tasks": [
+		{
+			"label": "go install",
+			"command": "${env:GOROOT}/bin/go install -v ./...",	
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		},
+		{
+			"label": "go test",
+			"command": "${env:GOROOT}/bin/go test -v ./...",	
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			}
+		},
+		{
+			"label": "go env",
+			"command": "${env:GOROOT}/bin/go env"
+		},
+		{
+			"label": "go version",
+			"command": "${env:GOROOT}/bin/go version"
+		}
+	]
+}
