@@ -21,7 +21,7 @@ type Nibs struct {
 	usedCurr int // how many bytes in `curr` were read
 	next     [8]byte
 	usedNext int  // how many bytes in `next` were read
-	pos      int  // bit position of last nibble (1-64)
+	pos      int  // bit position of next nibble (0-63)
 	eof      bool // true if EOF is reached for `r` (`next` is empty)
 }
 
@@ -38,7 +38,12 @@ func (n *Nibs) BitsRemaining() (int, error) {
 	if !n.eof {
 		return 0, ErrNotEOF
 	}
-	return (n.usedCurr * 8) - n.pos, nil
+	return n.remaining(), nil
+}
+
+// helper, likely inlined
+func (n *Nibs) remaining() int {
+	return (n.usedCurr * 8) - n.pos
 }
 
 // Nibble reads `bits` number of bits from the byte stream and returns the
@@ -56,7 +61,7 @@ func (n *Nibs) Nibble(bits int) (uint64, error) {
 	}
 	// check if all bits already read or trying to read more bits than available
 	if n.eof {
-		remaining := (n.usedCurr * 8) - n.pos
+		remaining := n.remaining()
 		if remaining == 0 {
 			return 0, io.EOF
 		}
@@ -72,22 +77,35 @@ func (n *Nibs) Nibble(bits int) (uint64, error) {
 			return 0, err
 		}
 		ret = ret << 1
-		ret = ret & uint64(bit)
+		bit64 := uint64(bit)
+		ret = ret | uint64(bit64)
 	}
 	return ret, nil
 }
 
 func (n *Nibs) nextBit() (byte, error) {
-	n.pos++
 	// check if we need to read more bytes
-	if n.pos > n.usedCurr*8 {
+	if n.pos == n.usedCurr*8 {
 		if n.eof {
 			return 0, io.EOF
 		}
-		n.curr = n.next
-		n.usedCurr = n.usedNext
-		n.pos = 0
 		var err error
+		// if first read, then read curr
+		if n.usedCurr == 0 && n.usedNext == 0 {
+			if n.usedCurr, err = n.reader.Read(n.curr[:]); err != nil {
+				if err == io.EOF {
+					n.eof = true
+				} else {
+					return 0, err
+				}
+			}
+		} else {
+			// not first read so promote next to curr
+			n.curr = n.next
+			n.usedCurr = n.usedNext
+			n.pos = 0
+		}
+		// read next
 		if n.usedNext, err = n.reader.Read(n.next[:]); err != nil {
 			if err == io.EOF {
 				n.eof = true
@@ -98,9 +116,11 @@ func (n *Nibs) nextBit() (byte, error) {
 	}
 
 	// get the correct byte based on pos
-	b := n.curr[n.pos % 8]
+	b := n.curr[n.pos/8]
 	// shift the bit we want to the rightmost
-	b >> ()
+	b = b >> (8 - uint(n.pos%8) - 1)
+	// increment pos to next position
+	n.pos++
 	// return 1 or 0
 	return b & 1, nil
 }
