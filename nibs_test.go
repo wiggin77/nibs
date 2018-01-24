@@ -2,6 +2,7 @@ package nibs_test
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -118,7 +119,7 @@ func TestTiny(t *testing.T) {
 		}
 	}
 
-	// reading reading any more should be EOF
+	// reading any more should be EOF
 	if _, err := nib.Nibble(1); err != io.EOF {
 		t.Errorf("expected error `io.EOF`, got `%v`", err)
 	}
@@ -129,21 +130,88 @@ func TestTiny(t *testing.T) {
 	}
 }
 
-func TestIOError(t *testing.T) {
-	const goodBytes = 32
-	b := []byte("0123456789012345678901234567890123456789")
-	r := NewFlakyReader(bytes.NewReader(b), goodBytes)
-	nib := nibs.New(r)
+func TestMany(t *testing.T) {
+	sizes := []int{0, 1, 2, 10, 64, 128, 1024, 2048, 10000, 10 * 1024 * 1000}
+	for _, size := range sizes {
+		trial(size, t)
+	}
+}
 
-	buf := make([]byte, len(b))
-	for i := 0; i < len(buf); i++ {
-		b, err := nib.Nibble(8)
-		if err != nil && i+1 < goodBytes {
-			t.Errorf("unexpected error at byte %d: %v", i, err)
+func trial(size int, t *testing.T) {
+	bufIn := make([]byte, size)
+	if _, err := rand.Read(bufIn); err != nil {
+		panic(err)
+	}
+	nib := nibs.New(bytes.NewReader(bufIn))
+
+	// nibble 4 bits at at time (hey, an actual nibble)
+	bufOut := make([]byte, size)
+	var b byte
+	for i := 0; i < size; i++ {
+		n, err := nib.Nibble(4)
+		if err != nil {
+			t.Errorf("unexpected error in first nibble for size %d, byte %d: %v", size, i, err)
 		}
-		buf[i] = byte(b)
+		b = (byte(n) << 4) & 0xF0
+
+		n, err = nib.Nibble(4)
+		if err != nil {
+			t.Errorf("unexpected error in second nibble for size %d, byte %d: %v", size, i, err)
+		}
+		b = b | (byte(n) & 0xFF)
+		bufOut[i] = b
 	}
 
+	// reading any more should be EOF
+	if _, err := nib.Nibble(1); err != io.EOF {
+		t.Errorf("expected error `io.EOF`, got `%v` for size %d", err, size)
+	}
+
+	// should be 0 bits left
+	if n, err := nib.BitsRemaining(); err != nil || n != 0 {
+		t.Errorf("expected %d bits remaining, got %d and error `%v` for size %d", 0, n, err, size)
+	}
+
+	// compare results
+	if !bytes.Equal(bufIn, bufOut) {
+		t.Errorf("bufIn != bufOut for size %d", size)
+	}
+}
+
+func TestIOError(t *testing.T) {
+	const size = 2 * 1024 * 1000
+	const goodBytes = size / 2
+	bufIn := make([]byte, size)
+	if _, err := rand.Read(bufIn); err != nil {
+		panic(err)
+	}
+	r := NewFlakyReader(bytes.NewReader(bufIn), goodBytes)
+	nib := nibs.New(r)
+
+	bufOut := make([]byte, len(bufIn))
+	for i := 0; i < len(bufOut); i++ {
+		b, err := nib.Nibble(8)
+
+		if err == nil && i+1 > goodBytes {
+			t.Errorf("expected a flaky error at byte %d", i)
+		}
+
+		if err != nil && i+1 <= goodBytes {
+			t.Errorf("unexpected error at byte %d: %v", i, err)
+		} else {
+			bufOut[i] = byte(b)
+		}
+	}
+
+	// compare should be ok up to `goodBytes`
+	if !bytes.Equal(bufIn[:goodBytes], bufOut[:goodBytes]) {
+		t.Error("goodBytes compare failed")
+	}
+
+	// overall compare should fail
+	if bytes.Equal(bufIn, bufOut) {
+		t.Error("full array compare should fail")
+	}
 }
 
 //
@@ -163,7 +231,7 @@ func NewFlakyReader(r io.Reader, goodBytes int) *FlakyReader {
 }
 
 // Read reads from the data stream, returning ErrFlaky once the
-// allowed number of good bytes is exceeded.
+// allowed number of good bytes is reached.
 func (fr *FlakyReader) Read(p []byte) (int, error) {
 	if fr.count <= 0 {
 		return 0, ErrFlaky
@@ -173,10 +241,13 @@ func (fr *FlakyReader) Read(p []byte) (int, error) {
 	// good byte count is less than buffer size
 	bufSize := len(p)
 	if bufSize > fr.count {
-		p = p[:bufSize-fr.count]
+		p = p[:bufSize-fr.count-1]
 	}
 
 	n, err := fr.reader.Read(p)
 	fr.count -= n
+	if fr.count <= 0 {
+		err = ErrFlaky
+	}
 	return n, err
 }
