@@ -58,9 +58,11 @@ func (n *Nibs) remaining() int {
 // nibs.ErrNibbleSize is returned.
 //
 // io.EOF is returned on subsequent call when exactly all the bits in the
-// stream have been read OR when trying to read more bits than are left
-// in the stream.  Use `BitsRemaining` to see how many bits are left over
-// after io.EOF.  A value of 0 is always returned for any non-nil error.
+// stream have been read. io.EOF is returned immediately when trying to read
+// more bits than are left in the stream.  Use `BitsRemaining` to see how many
+// bits are left over after io.EOF.
+//
+// A value of 0 is always returned for any non-nil error.
 func (n *Nibs) Nibble(bits int) (uint64, error) {
 	if bits < 1 || bits > 64 {
 		return 0, ErrNibbleSize
