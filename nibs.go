@@ -35,7 +35,7 @@ func New(r io.Reader) *Nibs {
 }
 
 // BitsRemaining returns the number of bits that are remaining to be read, if known.
-// If not known, meaning EOF is not yet reached internally and not other IO errors have occured,
+// If not known, meaning EOF is not yet reached internally and no other IO errors have occured,
 // then ErrUnknown is returned.
 // If known, reading more than this number causes `Nibble` to return io.EOF.
 // If error is nil and zero is returned then all the bits in the stream have been read.
