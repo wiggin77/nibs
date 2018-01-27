@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
-	"errors"
 	"io"
 	"testing"
+
+	. "github.com/wiggin77/nibs/_test"
 
 	"github.com/wiggin77/nibs"
 )
@@ -72,7 +73,7 @@ func TestErrNibbleSize(t *testing.T) {
 	}
 }
 
-func TestErrUnexpectedEOF(t *testing.T) {
+func TestEOF(t *testing.T) {
 	b := []byte{1, 2, 4, 8, 16, 32, 64, 128}
 	buf := bytes.NewReader(b)
 	nib := nibs.New(buf)
@@ -88,8 +89,8 @@ func TestErrUnexpectedEOF(t *testing.T) {
 	}
 
 	// reading 4 bytes should error
-	if _, err := nib.Nibble(32); err != io.ErrUnexpectedEOF {
-		t.Errorf("expected error `io.ErrUnexpectedEOF`, got `%v`", err)
+	if _, err := nib.Nibble(32); err != io.EOF {
+		t.Errorf("expected error `io.EOF`, got `%v`", err)
 	}
 
 	// reading 2 bytes should be ok
@@ -178,6 +179,141 @@ func trial(size int, t *testing.T) {
 	}
 }
 
+func TestNibble8(t *testing.T) {
+	const size = 256
+	bufIn := make([]byte, size)
+	if _, err := rand.Read(bufIn); err != nil {
+		panic(err)
+	}
+	nib := nibs.New(bytes.NewReader(bufIn))
+
+	bufOut := make([]byte, size)
+	for i := 0; i < size; i++ {
+		b, err := nib.Nibble8(8)
+		if err != nil {
+			t.Errorf("unexpected error `%v`", err)
+			break
+		}
+		bufOut[i] = b
+	}
+	if !bytes.Equal(bufIn, bufOut) {
+		t.Error("bufIn != bufOut")
+	}
+}
+
+func TestNibble16(t *testing.T) {
+	const size = 256
+	bufIn := make([]byte, size)
+	if _, err := rand.Read(bufIn); err != nil {
+		panic(err)
+	}
+	nib := nibs.New(bytes.NewReader(bufIn))
+
+	bufOut := make([]byte, size)
+	for i := 0; i < size; i++ {
+		b, err := nib.Nibble16(8)
+		if err != nil {
+			t.Errorf("unexpected error `%v`", err)
+			break
+		}
+		bufOut[i] = byte(b)
+	}
+	if !bytes.Equal(bufIn, bufOut) {
+		t.Error("bufIn != bufOut")
+	}
+}
+
+func TestNibble32(t *testing.T) {
+	const size = 256
+	bufIn := make([]byte, size)
+	if _, err := rand.Read(bufIn); err != nil {
+		panic(err)
+	}
+	nib := nibs.New(bytes.NewReader(bufIn))
+
+	bufOut := make([]byte, size)
+	for i := 0; i < size; i++ {
+		b, err := nib.Nibble32(8)
+		if err != nil {
+			t.Errorf("unexpected error `%v`", err)
+			break
+		}
+		bufOut[i] = byte(b)
+	}
+	if !bytes.Equal(bufIn, bufOut) {
+		t.Error("bufIn != bufOut")
+	}
+}
+
+// test using every possible nibble size
+func TestNibbleSizes(t *testing.T) {
+	const size = 768
+	for nibbleSize := 1; nibbleSize <= 64; nibbleSize++ {
+		bufIn := make([]byte, size)
+		if _, err := rand.Read(bufIn); err != nil {
+			panic(err)
+		}
+		nib := nibs.New(bytes.NewReader(bufIn))
+
+		baIn := &BitArray{}
+		baIn.AddSlice(bufIn)
+
+		baOut := &BitArray{}
+		for {
+			n, err := nib.Nibble(nibbleSize)
+			if err != nil {
+				break
+			}
+			baOut.AddVar(n, nibbleSize)
+		}
+		remaining, err := nib.BitsRemaining()
+		if err != nil {
+			t.Errorf("bits remaining should be known here. err=%v", err)
+			break
+		}
+		if remaining > 0 {
+			n, err := nib.Nibble(remaining)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				break
+			}
+			baOut.AddVar(n, remaining)
+		}
+
+		// now check result
+		if !baOut.Equals(baOut) {
+			t.Errorf("baIn != baOut for nibbleSize %d", nibbleSize)
+		}
+	}
+}
+
+func TestBitsRemaining(t *testing.T) {
+	bufIn := make([]byte, 10*1000*1024)
+	nib := nibs.New(bytes.NewReader(bufIn))
+
+	if _, err := nib.BitsRemaining(); err != nibs.ErrUnknown {
+		t.Error("expected ErrUnknown, got ", err)
+	}
+}
+
+func TestNibbleSizeErrors(t *testing.T) {
+	bufIn := make([]byte, 256)
+	nib := nibs.New(bytes.NewReader(bufIn))
+
+	if _, err := nib.Nibble32(64); err != nibs.ErrNibbleSize {
+		t.Error("expected ErrNibbleSize for Nibble32, got ", err)
+	}
+
+	if _, err := nib.Nibble16(32); err != nibs.ErrNibbleSize {
+		t.Error("expected ErrNibbleSize for Nibble16, got ", err)
+	}
+
+	if _, err := nib.Nibble8(16); err != nibs.ErrNibbleSize {
+		t.Error("expected ErrNibbleSize for Nibble8, got ", err)
+	}
+}
+
+// test nibbling from a flaky reader
 func TestIOError(t *testing.T) {
 	const size = 2 * 1024 * 1000
 	const goodBytes = size / 2
@@ -212,42 +348,4 @@ func TestIOError(t *testing.T) {
 	if bytes.Equal(bufIn, bufOut) {
 		t.Error("full array compare should fail")
 	}
-}
-
-//
-// Helpers for testing flaky IO
-//
-var ErrFlaky = errors.New("flaky test")
-
-type FlakyReader struct {
-	reader io.Reader
-	count  int
-}
-
-// NewFlakyReader returns a FlakyReader with the specified number of
-// bytes read before ErrFlaky is returned.
-func NewFlakyReader(r io.Reader, goodBytes int) *FlakyReader {
-	return &FlakyReader{reader: r, count: goodBytes}
-}
-
-// Read reads from the data stream, returning ErrFlaky once the
-// allowed number of good bytes is reached.
-func (fr *FlakyReader) Read(p []byte) (int, error) {
-	if fr.count <= 0 {
-		return 0, ErrFlaky
-	}
-
-	// read less bytes than original slice would allow if
-	// good byte count is less than buffer size
-	bufSize := len(p)
-	if bufSize > fr.count {
-		p = p[:bufSize-fr.count-1]
-	}
-
-	n, err := fr.reader.Read(p)
-	fr.count -= n
-	if fr.count <= 0 {
-		err = ErrFlaky
-	}
-	return n, err
 }

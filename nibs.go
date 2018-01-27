@@ -37,7 +37,7 @@ func New(r io.Reader) *Nibs {
 // BitsRemaining returns the number of bits that are remaining to be read, if known.
 // If not known, meaning EOF is not yet reached internally and not other IO errors have occured,
 // then ErrUnknown is returned.
-// If known, reading more than this number causes `Nibble` to return io.ErrUnexpectedEOF.
+// If known, reading more than this number causes `Nibble` to return io.EOF.
 // If error is nil and zero is returned then all the bits in the stream have been read.
 func (n *Nibs) BitsRemaining() (int, error) {
 	if n.err == nil {
@@ -58,9 +58,9 @@ func (n *Nibs) remaining() int {
 // nibs.ErrNibbleSize is returned.
 //
 // io.EOF is returned on subsequent call when exactly all the bits in the
-// stream have been read.
-// io.ErrUnexpectedEOF is returned when trying to read more bits than are left
-// in the stream.  A value of 0 is always returned for any non-nil error.
+// stream have been read OR when trying to read more bits than are left
+// in the stream.  Use `BitsRemaining` to see how many bits are left over
+// after io.EOF.  A value of 0 is always returned for any non-nil error.
 func (n *Nibs) Nibble(bits int) (uint64, error) {
 	if bits < 1 || bits > 64 {
 		return 0, ErrNibbleSize
@@ -72,7 +72,7 @@ func (n *Nibs) Nibble(bits int) (uint64, error) {
 			return 0, n.err
 		}
 		if bits > remaining {
-			return 0, io.ErrUnexpectedEOF
+			return 0, io.EOF
 		}
 	}
 
@@ -87,6 +87,51 @@ func (n *Nibs) Nibble(bits int) (uint64, error) {
 		ret = ret | uint64(bit64)
 	}
 	return ret, nil
+}
+
+// Nibble8  reads `bits` number of bits from the byte stream and returns the
+// value as a uint8.
+//
+// `bits` must be in the range 1 to 8 inclusive, otherwise
+// nibs.ErrNibbleSize is returned.
+//
+// See `Nibble` method for details.
+func (n *Nibs) Nibble8(bits int) (uint8, error) {
+	if bits < 1 || bits > 8 {
+		return 0, ErrNibbleSize
+	}
+	val, err := n.Nibble(bits)
+	return uint8(val), err
+}
+
+// Nibble16  reads `bits` number of bits from the byte stream and returns the
+// value as a uint16.
+//
+// `bits` must be in the range 1 to 16 inclusive, otherwise
+// nibs.ErrNibbleSize is returned.
+//
+// See `Nibble` method for details.
+func (n *Nibs) Nibble16(bits int) (uint16, error) {
+	if bits < 1 || bits > 16 {
+		return 0, ErrNibbleSize
+	}
+	val, err := n.Nibble(bits)
+	return uint16(val), err
+}
+
+// Nibble32  reads `bits` number of bits from the byte stream and returns the
+// value as a uint32.
+//
+// `bits` must be in the range 1 to 32 inclusive, otherwise
+// nibs.ErrNibbleSize is returned.
+//
+// See `Nibble` method for details.
+func (n *Nibs) Nibble32(bits int) (uint32, error) {
+	if bits < 1 || bits > 32 {
+		return 0, ErrNibbleSize
+	}
+	val, err := n.Nibble(bits)
+	return uint32(val), err
 }
 
 func (n *Nibs) nextBit() (byte, error) {
@@ -126,7 +171,7 @@ func (n *Nibs) nextBit() (byte, error) {
 		if n.err != nil {
 			return 0, n.err
 		}
-		panic(fmt.Errorf("read past avail bytes, but no EOF or error. used=%d, pos=%d", n.used, n.pos))
+		return 0, fmt.Errorf("BUG: read past avail bytes, but no EOF or error. used=%d, pos=%d", n.used, n.pos)
 	}
 
 	// get the correct byte based on pos
