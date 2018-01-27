@@ -9,8 +9,8 @@ See [godoc](https://godoc.org/github.com/wiggin77/nibs).
 
 ```go
 // provide an io.Reader
-	b := []byte("this is a test")
-	buf := bytes.NewReader(b)
+  b := []byte("this is a test")
+  buf := bytes.NewReader(b)
 
 // create instance of Nibs
 nib := nibs.New(buf)
