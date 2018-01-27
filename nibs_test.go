@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"testing"
 
@@ -11,6 +12,35 @@ import (
 
 	"github.com/wiggin77/nibs"
 )
+
+func ExampleNew() {
+	// provide an io.Reader
+	b := []byte("this is a test")
+	buf := bytes.NewReader(b)
+
+	// create instance of Nibs
+	nib := nibs.New(buf)
+
+	// read until io.EOF,
+	for {
+		n, err := nib.Nibble8(4)
+		if err != nil {
+			break
+		}
+		fmt.Printf("nibbled 4 bits: %d", n)
+	}
+
+	// once EOF is reached, there will be bits left over
+	// if nibble sizes do not divide evenly into the `NibbleXX`
+	// return type. Use `BitsRemaining` to determine how many.
+	remaining, err := nib.BitsRemaining()
+	if err == nil && remaining > 0 {
+		n, err := nib.Nibble(remaining)
+		if err == nil {
+			fmt.Printf("nibbled %d remaining bits: %d\n", remaining, n)
+		}
+	}
+}
 
 func TestNew(t *testing.T) {
 	var num uint64 = 123456789
