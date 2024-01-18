@@ -1,7 +1,7 @@
 # nibs
 
 [![GoDoc](https://godoc.org/github.com/wiggin77/nibs?status.svg)](https://godoc.org/github.com/wiggin77/nibs)
-[![Build Status](https://github.com/wiggin77/nibs/actions/workflows/go.yml/badge.svg)
+![Build Status](https://github.com/wiggin77/nibs/actions/workflows/go.yml/badge.svg)
 
 Nibs is a Go package for reading streams of bytes in nibbles. Each nibble can be a number of bits in the range 1 bit to 64 bits inclusive.
 
